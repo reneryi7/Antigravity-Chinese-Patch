@@ -1,0 +1,35 @@
+{
+  "name": "antigravity-chinese-patch",
+  "version": "4.0.0",
+  "description": "Google Antigravity 桌面客户端全量中文汉化补丁 (v4.0 模块化零依赖架构，全面适配 Antigravity 2.35.0+)",
+  "main": "src/cli.js",
+  "bin": {
+    "antigravity-zh-patch": "src/cli.js"
+  },
+  "scripts": {
+    "start": "node src/cli.js install",
+    "install-patch": "node src/cli.js install",
+    "uninstall-patch": "node src/cli.js uninstall",
+    "status": "node src/cli.js status",
+    "dry-run": "node src/cli.js install --dry-run",
+    "lint": "node tools/lint-locales.js",
+    "lint:fix": "node tools/lint-locales.js --fix",
+    "audit": "node tools/extract-all.js",
+    "test": "node tools/lint-locales.js && node tests/run-tests.js",
+    "build": "node tools/build-release.js"
+  },
+  "keywords": [
+    "antigravity",
+    "google-antigravity",
+    "i18n",
+    "zh-cn",
+    "chinese",
+    "localization",
+    "electron",
+    "patch"
+  ],
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}

@@ -1,0 +1,19 @@
+# 本地原始 ASAR 调试与备份文件（严禁入库）
+*.asar
+*.asar.backup
+*.asar.old
+*.asar.*
+
+# 用户本机私有配置（严禁入库）
+config.local.json
+
+# 构建发布产物目录（通过 GitHub Releases 自动分发）
+dist-release/
+release/
+
+# Node 与系统临时文件
+node_modules/
+*.log
+*.lock
+.DS_Store
+Thumbs.db

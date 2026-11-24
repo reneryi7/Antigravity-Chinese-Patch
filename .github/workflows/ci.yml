@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  verify:
+    name: Lint Locales & Run Regression Tests
+    runs-on: windows-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Lint locale dictionaries & ASCII scripts
+        run: node tools/lint-locales.js
+
+      - name: Run unit & architecture regression tests
+        run: node tests/run-tests.js
+
+      - name: Verify clean release package build
+        run: node tools/build-release.js
