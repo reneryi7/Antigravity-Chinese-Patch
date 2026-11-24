@@ -142,8 +142,38 @@ function isAutoHealDaemonRunning() {
   return isFileLocked(DAEMON_LOCK_FILE);
 }
 
+function isVbScriptAvailable() {
+  if (process.platform !== 'win32') return false;
+  try {
+    const sysRoot = process.env.SystemRoot || 'C:\\Windows';
+    const hasHost = ofs.existsSync(path.join(sysRoot, 'System32', 'wscript.exe'));
+    const hasDll =
+      ofs.existsSync(path.join(sysRoot, 'System32', 'vbscript.dll')) ||
+      ofs.existsSync(path.join(sysRoot, 'SysWOW64', 'vbscript.dll'));
+    if (!hasHost || !hasDll) return false;
+    for (const hive of ['HKLM', 'HKCU']) {
+      const wshReg = spawnSync(
+        'reg.exe',
+        ['query', `${hive}\\SOFTWARE\\Microsoft\\Windows Script Host\\Settings`, '/v', 'Enabled'],
+        { encoding: 'utf8', windowsHide: true, timeout: 2500 }
+      );
+      if (wshReg.status === 0 && /REG_DWORD\s+0x0\b/i.test(wshReg.stdout || '')) {
+        return false;
+      }
+    }
+    const clsidReg = spawnSync('reg.exe', ['query', 'HKCR\\VBScript\\CLSID'], {
+      stdio: 'ignore',
+      windowsHide: true,
+      timeout: 2500,
+    });
+    return clsidReg.status === 0;
+  } catch {
+    return false;
+  }
+}
+
 function startAutoHealDaemonProcess() {
-  if (process.platform !== 'win32' || !ofs.existsSync(VBS_FILE_PATH)) return false;
+  if (process.platform !== 'win32' || !ofs.existsSync(VBS_FILE_PATH) || !isVbScriptAvailable()) return false;
   if (isAutoHealDaemonRunning()) return true;
 
   try {
@@ -216,6 +246,16 @@ function installAutoHealService(antigravityDir, projectRoot = PROJECT_ROOT) {
           try { ofs.unlinkSync(staleFile); } catch {}
         }
       }
+    }
+
+    if (!isVbScriptAvailable()) {
+      for (const staleVbs of [UPDATE_RUNNER_VBS_PATH, VBS_FILE_PATH]) {
+        try {
+          if (ofs.existsSync(staleVbs)) ofs.unlinkSync(staleVbs);
+        } catch {}
+      }
+      appendLog('检测到当前系统未启用 VBScript 引擎 (vbscript.dll/WSH)，已自动降级为纯 ASAR 静态注入模式');
+      return false;
     }
 
     stopRunningAutoHealDaemon(false);

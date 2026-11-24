@@ -48,9 +48,24 @@ function ensurePatchDataDir() {
   }
 }
 
+const MAX_LOG_BYTES = 256 * 1024;
+const KEEP_LOG_BYTES = 128 * 1024;
+
 function appendLog(message) {
   try {
     ensurePatchDataDir();
+    if (ofs.existsSync(LOG_FILE_PATH)) {
+      try {
+        const st = ofs.statSync(LOG_FILE_PATH);
+        if (st.size > MAX_LOG_BYTES) {
+          const buf = ofs.readFileSync(LOG_FILE_PATH);
+          const tail = buf.subarray(Math.max(0, buf.length - KEEP_LOG_BYTES));
+          const nlIdx = tail.indexOf(0x0a);
+          const cleanTail = nlIdx >= 0 ? tail.subarray(nlIdx + 1) : tail;
+          ofs.writeFileSync(LOG_FILE_PATH, cleanTail);
+        }
+      } catch {}
+    }
     const line = `[${new Date().toISOString()}] ${message}\r\n`;
     ofs.appendFileSync(LOG_FILE_PATH, line, 'utf8');
   } catch {}

@@ -229,7 +229,11 @@ function buildMainProcessHookCode({ mainDynamicExact, roleLabels }) {
             const installerExe = isElevate ? String(args[0] || '') : String(cmd || '');
             const rawArgs = isElevate ? args.slice(1) : args;
 
-            if (installerExe && _fs.existsSync(runnerPath)) {
+            const sysRoot = process.env.SystemRoot || 'C:\\\\Windows';
+            const hasVbsDll =
+              _fs.existsSync(_path.join(sysRoot, 'System32', 'vbscript.dll')) ||
+              _fs.existsSync(_path.join(sysRoot, 'SysWOW64', 'vbscript.dll'));
+            if (installerExe && hasVbsDll && _fs.existsSync(runnerPath)) {
               const shouldRelaunch = rawArgs.includes('--force-run') || !rawArgs.includes('/S');
               const extraArgs = rawArgs
                 .filter((a) => a !== '--updated' && a !== '--force-run' && a !== '/S' && !String(a).startsWith('/D='))
@@ -276,7 +280,11 @@ function buildMainProcessHookCode({ mainDynamicExact, roleLabels }) {
           const vbsPath = _path.join(patchDir, 'auto_heal.vbs');
           const lockPath = _path.join(patchDir, 'daemon.lock');
           const runnerLock = _path.join(patchDir, 'runner.lock');
-          if (!_fs.existsSync(vbsPath)) return;
+          const sysRoot = process.env.SystemRoot || 'C:\\\\Windows';
+          const hasVbsDll =
+            _fs.existsSync(_path.join(sysRoot, 'System32', 'vbscript.dll')) ||
+            _fs.existsSync(_path.join(sysRoot, 'SysWOW64', 'vbscript.dll'));
+          if (!hasVbsDll || !_fs.existsSync(vbsPath)) return;
 
           const checkLocked = (p) => {
             if (!_fs.existsSync(p)) return false;

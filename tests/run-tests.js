@@ -210,6 +210,19 @@ body.append(xtermProtected.element);
 const modelProtected = textElement('Gemini 4 Carbon', { 'data-testid': 'model-selector-trigger' });
 body.append(modelProtected.element);
 
+// 第三方扩展与 HTML5 标准免翻译保护边界测试（含 6 层深层子树增量变更场景）
+const notranslateProtected = textElement('Token Usage', { class: 'agy-hs-pill notranslate' });
+body.append(notranslateProtected.element);
+const translateNoProtected = textElement('Settings', { translate: 'no' });
+body.append(translateNoProtected.element);
+const skipOverlayRoot = new FakeElement('DIV', { 'data-i18n-translated': 'skip' });
+let deepCursor = skipOverlayRoot;
+for (let depth = 0; depth < 5; depth++) {
+  deepCursor = deepCursor.append(new FakeElement('DIV'));
+}
+const deepSkipText = deepCursor.append(new FakeText('Global Permissions'));
+body.append(skipOverlayRoot);
+
 // v4.1 斜杠命令芯片 (/plan) 与 @提及芯片保护 + 设置页 Plan 上下文区分测试
 const slashMentionChip = new FakeElement('SPAN', { 'data-beautiful-mention': '/plan' });
 slashMentionChip.append(new FakeElement('SPAN')).append(new FakeText('/'));
@@ -261,6 +274,13 @@ samples.forEach(([source, expected], idx) => {
 assert.strictEqual(monacoProtected.text.nodeValue, 'Settings');
 assert.strictEqual(xtermProtected.text.nodeValue, 'New Conversation');
 assert.strictEqual(modelProtected.text.nodeValue, 'Gemini 4 Carbon');
+assert.strictEqual(notranslateProtected.text.nodeValue, 'Token Usage');
+assert.strictEqual(translateNoProtected.text.nodeValue, 'Settings');
+assert.strictEqual(deepSkipText.nodeValue, 'Global Permissions');
+// 模拟 MutationObserver 对受保护容器深层子节点（depth=6）触发增量翻译时依然免疫
+runtime.translateNode(deepCursor);
+runtime.translateNode(deepSkipText);
+assert.strictEqual(deepSkipText.nodeValue, 'Global Permissions', '受保护深层子树局部变更不应被误翻');
 assert.strictEqual(slashMentionChip.textContent, '/plan', `斜杠命令芯片被误翻: ${slashMentionChip.textContent}`);
 assert.strictEqual(settingsPlanLabel.text.nodeValue, '订阅方案', `设置弹窗内 Plan 应译为订阅方案: ${settingsPlanLabel.text.nodeValue}`);
 assert.strictEqual(inputSample.getAttribute('placeholder'), '搜索自定义扩展...');
@@ -294,20 +314,31 @@ assert.ok(
   `长描述截断自适应未生效: ${trTruncated}`
 );
 
-// 6. 验证内存编译器输出的浏览器端自包含包与主进程 Hook 100% 合法
+// 6. 验证内存编译器输出的浏览器端自包含包与主进程 Hook 100% 合法，且包含防卡顿与 Win11 兼容性优化
 const compiledBundle = compileFrontendScript();
 assert.ok(compiledBundle.includes(PATCH_DICT_SIGNATURE));
+assert.ok(compiledBundle.includes('settingsContextCache'), '前端引擎应包含 isSettingsContext WeakMap 缓存');
+const hoverSelectorMatch = compiledBundle.match(/const HOVER_PORTAL_SELECTOR = \[([\s\S]*?)\]\.join/);
+assert.ok(hoverSelectorMatch, '未找到 HOVER_PORTAL_SELECTOR 定义');
+assert.ok(!hoverSelectorMatch[1].includes('[role="dialog"]'), 'HOVER_PORTAL_SELECTOR 不应包含 [role="dialog"]（避免设置弹窗鼠标滑动重复全扫卡顿）');
+assert.ok(!hoverSelectorMatch[1].includes('[role="alertdialog"]'), 'HOVER_PORTAL_SELECTOR 不应包含 [role="alertdialog"]');
 assert.doesNotThrow(() => new Function(compiledBundle));
 
 const mainAssets = compileMainProcessAssets();
 assert.ok(mainAssets.mainHookCode.includes('/* __AGY_ZH_MAIN_HOOK_START__ */'));
 assert.ok(mainAssets.mainHookCode.includes('update_runner.vbs'));
+assert.ok(mainAssets.mainHookCode.includes('vbscript.dll'), '主进程 Hook 应检测 vbscript.dll 可用性以兼容 Win11 24H2+');
 assert.doesNotThrow(() => new Function(mainAssets.mainHookCode));
 
-// 7. 验证生成的 VBS 脚本 100% 纯 ASCII、动态读取 install_dir.txt（不写死 C 盘路径）、且每个过程首行均有 On Error Resume Next
+// 7. 验证生成的 VBS 脚本 100% 纯 ASCII、动态读取 install_dir.txt（不写死 C 盘路径）、含日志轮转与低功耗退避、且每个过程首行均有 On Error Resume Next
+const autoHealVbs = generateAutoHealVbs();
+const updateRunnerVbs = generateUpdateRunnerVbs();
+assert.ok(autoHealVbs.includes('loopSleepMs = 8000'), 'auto_heal.vbs 应包含稳态 8 秒低功耗退避');
+assert.ok(autoHealVbs.includes('262144'), 'auto_heal.vbs 应包含 256KB 日志轮转保护');
+assert.ok(updateRunnerVbs.includes('262144'), 'update_runner.vbs 应包含 256KB 日志轮转保护');
 for (const [scriptName, vbsContent] of [
-  ['auto_heal.vbs', generateAutoHealVbs()],
-  ['update_runner.vbs', generateUpdateRunnerVbs()],
+  ['auto_heal.vbs', autoHealVbs],
+  ['update_runner.vbs', updateRunnerVbs],
 ]) {
   assert.ok(/^[\x00-\x7F]+$/.test(vbsContent), `${scriptName} 必须为 100% 纯 ASCII`);
   assert.ok(vbsContent.includes('install_dir.txt'), `${scriptName} 必须支持从 install_dir.txt 动态读取安装路径`);

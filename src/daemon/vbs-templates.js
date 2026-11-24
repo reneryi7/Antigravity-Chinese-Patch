@@ -16,6 +16,16 @@ function generateSharedVbsHelpers() {
   return `Sub WriteVbsLog(msg)
   On Error Resume Next
   Err.Clear
+  If fso.FileExists(logFile) Then
+    Dim lf
+    Set lf = fso.GetFile(logFile)
+    If Err.Number = 0 Then
+      If lf.Size > 262144 Then
+        fso.DeleteFile logFile, True
+      End If
+    End If
+  End If
+  Err.Clear
   Dim ts
   Set ts = fso.OpenTextFile(logFile, 8, True)
   If Err.Number = 0 Then
@@ -628,7 +638,7 @@ Dim installerFile, relaunchFile, taskFile, updateRunnerVbs, lockFile, runnerLock
 Dim cliJs, agExe, lsExeV2, lsExeV1, uninstExe
 Dim lockStream, expectedSize, guardianSize, currentSize, needPatchHeal, lastFailedSize, failCount
 Dim rawPortSig, normPortSig, desiredCdpSig, verifiedCdpSig, verifyFailSig, verifyFailCount
-Dim loopTarget, loopSleepMs
+Dim loopTarget, loopSleepMs, stableCycles
 
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set shell = CreateObject("WScript.Shell")
@@ -656,6 +666,7 @@ lastFailedSize = ""
 failCount = 0
 verifyFailSig = ""
 verifyFailCount = 0
+stableCycles = 0
 
 If fso.FolderExists(patchDir) Then
   shell.CurrentDirectory = patchDir
@@ -787,6 +798,7 @@ Sub RunCheckCycle()
   End If
 
   If needPatchHeal Then
+    stableCycles = 0
     If currentSize <> "" And currentSize = lastFailedSize And failCount >= 8 Then
       WScript.Sleep 8000
     Else
@@ -861,17 +873,26 @@ Sub RunCheckCycle()
       End If
     End If
   End If
+  If stableCycles < 100 Then
+    stableCycles = stableCycles + 1
+  End If
   Err.Clear
 End Sub
 
 Call RunCheckCycle()
 
 Do
-  loopSleepMs = 1500
+  ' Adaptive low-power backoff: 1.5s on boot, 8s once healthy and stable
+  If stableCycles >= 8 Then
+    loopSleepMs = 8000
+  Else
+    loopSleepMs = 1500
+  End If
   loopTarget = ReadTextFile(junctionFile)
   If loopTarget <> "" Then
     If LCase(loopTarget) <> LCase(agDir) Then
       If Not IsJunction(agDir) Then
+        stableCycles = 0
         loopSleepMs = 400
       End If
     End If

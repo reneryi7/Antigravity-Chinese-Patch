@@ -167,10 +167,14 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
 
   function isProtectedBoundary(el) {
     if (!el || el.nodeType !== 1) return false;
+    if (el.dataset && el.dataset.i18nTranslated === 'skip') return true;
     const upperTag = el.tagName ? (IGNORED_TAGS[el.tagName] ? el.tagName : el.tagName.toUpperCase()) : '';
     if (upperTag && IGNORED_TAGS[upperTag]) return true;
     if (el.isContentEditable) return true;
     if (el.getAttribute) {
+      if (el.getAttribute('translate') === 'no' || el.getAttribute('data-i18n-translated') === 'skip') {
+        return true;
+      }
       const testId = el.getAttribute('data-testid');
       if (
         testId &&
@@ -193,6 +197,7 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
     }
     const cls = typeof el.className === 'string' ? el.className : '';
     if (cls) {
+      if (cls.indexOf('notranslate') !== -1) return true;
       for (let i = 0; i < IGNORED_CLASSES.length; i++) {
         if (cls.indexOf(IGNORED_CLASSES[i]) !== -1) return true;
       }
@@ -202,11 +207,11 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
 
   function shouldSkipElement(el) {
     if (!el || el.nodeType !== 1) return false;
-    if (isProtectedBoundary(el)) return true;
-    let anc = el.parentElement;
-    for (let d = 0; anc && d < 3; d++) {
-      if (isProtectedBoundary(anc)) return true;
-      anc = anc.parentElement;
+    let cur = el;
+    for (let d = 0; cur && d < 24; d++) {
+      if (cur.tagName === 'BODY' || cur.tagName === 'HTML') break;
+      if (isProtectedBoundary(cur)) return true;
+      cur = cur.parentElement;
     }
     return false;
   }
@@ -252,35 +257,110 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
     return false;
   }
 
+  const settingsContextCache = typeof WeakMap !== 'undefined' ? new WeakMap() : null;
+
   function isSettingsContext(el) {
+    if (!el || el.nodeType !== 1) return false;
+    if (settingsContextCache && settingsContextCache.has(el)) {
+      return settingsContextCache.get(el);
+    }
     let cur = el;
     let depth = 0;
+    let matched = false;
     while (cur && depth < 12) {
       if (cur.tagName === 'BODY' || cur.tagName === 'HTML') break;
+      if (settingsContextCache && cur !== el && settingsContextCache.has(cur)) {
+        matched = settingsContextCache.get(cur);
+        break;
+      }
       if (cur.getAttribute) {
         if (
           cur.getAttribute('role') === 'dialog' ||
           (cur.hasAttribute && (cur.hasAttribute('data-screen') || cur.hasAttribute('data-settings-root')))
         ) {
-          return true;
+          matched = true;
+          break;
         }
         const tid = cur.getAttribute('data-testid') || '';
         if (tid === 'settings-sidebar' || tid.indexOf('settings-nav-item-') === 0) {
-          return true;
+          matched = true;
+          break;
         }
       }
       const cls = typeof cur.className === 'string' ? cur.className : '';
       if (cls && (cls.indexOf('settings-modal') !== -1 || cls.indexOf('settings-standalone') !== -1)) {
-        return true;
+        matched = true;
+        break;
       }
-      if (depth >= 1 && depth <= 5 && hasSettingsSidebarDescendant(cur)) {
-        return true;
+      if (depth >= 1 && depth <= 4 && hasSettingsSidebarDescendant(cur)) {
+        matched = true;
+        break;
       }
       cur = cur.parentElement;
       depth++;
     }
-    return Boolean(el && el.closest && el.closest('[role="dialog"]'));
+    if (!matched && el.closest && el.closest('[role="dialog"]')) {
+      matched = true;
+    }
+    if (settingsContextCache) {
+      settingsContextCache.set(el, matched);
+    }
+    return matched;
   }
+
+  // O(1) 触发词集合：仅当文本命中极少数上下文内联碎片时才向上探测祖先上下文，彻底避免设置弹窗内对全部普通文本做 9 轮祖先 textContent 拼接
+  const CTX_PROJECT_DELETE_TRIGGERS = new Set(['Permanently delete', 'including', 'and', '.']);
+  const CTX_LOCAL_PERM_TRIGGERS = new Set([
+    'This project was created for',
+    'This project was created for the',
+    'This project was created for an',
+    'the',
+    'an',
+    'automation.',
+    'automation. Also includes',
+    'Also includes',
+    'Global Permissions',
+    'global settings',
+    'when working',
+    'in this project',
+    'in these conversations',
+    'when working in this project.',
+    'when working in these conversations.',
+    'Learn more',
+    '.',
+  ]);
+  const CTX_PLUGINS_INTRO_TRIGGERS = new Set([
+    'Plugins are packaged collections of skills and MCPs to help the Agent in',
+    'work with Google developer products. You can always change your choices in Settings.',
+  ]);
+  const CTX_NO_ADS_TRIGGERS = new Set([
+    'Customize your experience across the agent, plugins, and product from the settings and marketplace. We won’t show you ads or let advertisers influence what',
+    "Customize your experience across the agent, plugins, and product from the settings and marketplace. We won't show you ads or let advertisers influence what",
+    'says.',
+  ]);
+  const CTX_ACCOUNT_SWITCH_TRIGGERS = new Set([
+    'Signed in as',
+    '. To use another account, add it in the',
+    '. To add another account, go to the',
+    'tab.',
+    'Sign in again',
+    'to use Voice.',
+    'Click',
+    'to open macOS Privacy & Security.',
+  ]);
+  const CTX_COMPUTER_PERM_TRIGGERS = new Set([
+    'In System Settings, turn on',
+    'In System Settings, click',
+    ', choose',
+    ', then turn it on.',
+    'Already on? Select',
+    ', click',
+    ', then',
+    'drag it back in from the small window.',
+    'click',
+    'and add it again.',
+  ]);
+  const CTX_AGENT_MODEL_TRIGGERS = new Set(['Agent:', '. Change it in the model menu.']);
 
   function applyContextualMap(node, text, contextElement, map, cleanLeadingWhitespaceKey) {
     if (!contextElement || !hasOwn.call(map, text)) return false;
@@ -296,169 +376,194 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
   }
 
   function translateContextualTextNode(node, text) {
-    const projectDeleteContext = findContextElement(
-      node,
-      'i18nProjectDeleteSummary',
-      /^Permanently delete .+ including \d+ active conversations? and \d+ archived conversations?\.$/i
-    );
-    if (projectDeleteContext) {
-      if (text === 'Permanently delete') { node.nodeValue = '永久删除'; return true; }
-      if (text === 'including') { node.nodeValue = '，包括'; return true; }
-      if (text === 'and') { node.nodeValue = '和'; return true; }
-      const activeMatch = text.match(/^(\d+) active conversations?$/i);
-      if (activeMatch) { node.nodeValue = `${activeMatch[1]} 个活跃对话`; return true; }
-      const archivedMatch = text.match(/^(\d+) archived conversations?$/i);
-      if (archivedMatch) { node.nodeValue = `${archivedMatch[1]} 个已归档对话`; return true; }
-      if (text === '.') { node.nodeValue = '。'; return true; }
-    }
-
-    const localPermissionsContext = findContextElement(
-      node,
-      'i18nLocalPermissionsSummary',
-      /(?:Also includes (?:Global Permissions|global settings) when working|This project was created for (?:the .+ |an )automation\.)/i
-    );
     if (
-      applyContextualMap(
+      CTX_PROJECT_DELETE_TRIGGERS.has(text) ||
+      /^\d+ (?:active|archived) conversations?$/i.test(text)
+    ) {
+      const projectDeleteContext = findContextElement(
         node,
-        text,
-        localPermissionsContext,
-        {
-          'This project was created for': '此项目专为',
-          'This project was created for the': '此项目专为 ',
-          'This project was created for an': '此项目专为一项',
-          'the': ' ',
-          'an': '一项',
-          'automation.': '自动化创建。',
-          'automation. Also includes': '自动化创建。还会应用',
-          'Also includes': '还会应用',
-          'Global Permissions': '全局权限',
-          'global settings': '全局设置',
-          'when working': '（适用于',
-          'in this project': '当前项目）',
-          'in these conversations': '这些对话）',
-          'when working in this project.': '（适用于当前项目）。',
-          'when working in these conversations.': '（适用于这些对话）。',
-          'Learn more': '了解更多',
-          '.': '。',
-        },
-        'Also includes'
-      )
-    ) {
-      return true;
+        'i18nProjectDeleteSummary',
+        /^Permanently delete .+ including \d+ active conversations? and \d+ archived conversations?\.$/i
+      );
+      if (projectDeleteContext) {
+        if (text === 'Permanently delete') { node.nodeValue = '永久删除'; return true; }
+        if (text === 'including') { node.nodeValue = '，包括'; return true; }
+        if (text === 'and') { node.nodeValue = '和'; return true; }
+        const activeMatch = text.match(/^(\d+) active conversations?$/i);
+        if (activeMatch) { node.nodeValue = `${activeMatch[1]} 个活跃对话`; return true; }
+        const archivedMatch = text.match(/^(\d+) archived conversations?$/i);
+        if (archivedMatch) { node.nodeValue = `${archivedMatch[1]} 个已归档对话`; return true; }
+        if (text === '.') { node.nodeValue = '。'; return true; }
+      }
     }
 
-    const presetLearnMoreContext = findContextElement(
-      node,
-      'i18nPresetLearnMore',
-      /^Learn more about\s+(?:Default|Full machine|Turbo mode|Inherit Global|Custom)$/i
-    );
-    if (presetLearnMoreContext && text === 'Learn more about') {
-      node.nodeValue = '详细了解';
-      return true;
+    if (CTX_LOCAL_PERM_TRIGGERS.has(text)) {
+      const localPermissionsContext = findContextElement(
+        node,
+        'i18nLocalPermissionsSummary',
+        /(?:Also includes (?:Global Permissions|global settings) when working|This project was created for (?:the .+ |an )automation\.)/i
+      );
+      if (
+        applyContextualMap(
+          node,
+          text,
+          localPermissionsContext,
+          {
+            'This project was created for': '此项目专为',
+            'This project was created for the': '此项目专为 ',
+            'This project was created for an': '此项目专为一项',
+            'the': ' ',
+            'an': '一项',
+            'automation.': '自动化创建。',
+            'automation. Also includes': '自动化创建。还会应用',
+            'Also includes': '还会应用',
+            'Global Permissions': '全局权限',
+            'global settings': '全局设置',
+            'when working': '（适用于',
+            'in this project': '当前项目）',
+            'in these conversations': '这些对话）',
+            'when working in this project.': '（适用于当前项目）。',
+            'when working in these conversations.': '（适用于这些对话）。',
+            'Learn more': '了解更多',
+            '.': '。',
+          },
+          'Also includes'
+        )
+      ) {
+        return true;
+      }
     }
 
-    const pluginsIntroContext = findContextElement(
-      node,
-      'i18nPluginsIntro',
-      /^Plugins are packaged collections of skills and MCPs to help the Agent in .+ work with Google developer products/i
-    );
-    if (
-      applyContextualMap(node, text, pluginsIntroContext, {
-        'Plugins are packaged collections of skills and MCPs to help the Agent in':
-          '插件是技能 (Skills) 与 MCP 的打包集合，可帮助',
-        'work with Google developer products. You can always change your choices in Settings.':
-          '中的智能体配合 Google 开发者产品协同工作。您随时可以在设置中更改您的选择。',
-      })
-    ) {
-      return true;
+    if (text === 'Learn more about') {
+      const presetLearnMoreContext = findContextElement(
+        node,
+        'i18nPresetLearnMore',
+        /^Learn more about\s+(?:Default|Full machine|Turbo mode|Inherit Global|Custom)$/i
+      );
+      if (presetLearnMoreContext) {
+        node.nodeValue = '详细了解';
+        return true;
+      }
     }
 
-    const noAdsContext = findContextElement(
-      node,
-      'i18nNoAdsDisclaimer',
-      /let advertisers influence what .+ says\.$/i
-    );
-    if (
-      applyContextualMap(node, text, noAdsContext, {
-        'Customize your experience across the agent, plugins, and product from the settings and marketplace. We won’t show you ads or let advertisers influence what':
-          '您可以通过设置和插件市场定制智能体、插件与产品的体验。我们不会向您展示广告，也不会让广告商影响',
-        "Customize your experience across the agent, plugins, and product from the settings and marketplace. We won't show you ads or let advertisers influence what":
-          '您可以通过设置和插件市场定制智能体、插件与产品的体验。我们不会向您展示广告，也不会让广告商影响',
-        'says.': '所生成的内容。',
-      })
-    ) {
-      return true;
+    if (CTX_PLUGINS_INTRO_TRIGGERS.has(text)) {
+      const pluginsIntroContext = findContextElement(
+        node,
+        'i18nPluginsIntro',
+        /^Plugins are packaged collections of skills and MCPs to help the Agent in .+ work with Google developer products/i
+      );
+      if (
+        applyContextualMap(node, text, pluginsIntroContext, {
+          'Plugins are packaged collections of skills and MCPs to help the Agent in':
+            '插件是技能 (Skills) 与 MCP 的打包集合，可帮助',
+          'work with Google developer products. You can always change your choices in Settings.':
+            '中的智能体配合 Google 开发者产品协同工作。您随时可以在设置中更改您的选择。',
+        })
+      ) {
+        return true;
+      }
     }
 
-    const accountSwitchContext = findContextElement(
-      node,
-      'i18nAccountSwitchHint',
-      /(?:To use another account, add it in the|To add another account, go to the|Sign in again to use Voice\.|open macOS Privacy & Security\.)/i
-    );
-    if (
-      applyContextualMap(node, text, accountSwitchContext, {
-        'Signed in as': '当前已登录为',
-        '. To use another account, add it in the': '。如需使用其他账户，请在',
-        '. To add another account, go to the': '。如需添加其他账户，请前往',
-        'tab.': '选项卡中添加。',
-        'Sign in again': '重新登录',
-        'to use Voice.': '以使用语音功能。',
-        'Click': '点击',
-        'to open macOS Privacy & Security.': '以打开 macOS 隐私与安全性设置。',
-      })
-    ) {
-      return true;
+    if (CTX_NO_ADS_TRIGGERS.has(text)) {
+      const noAdsContext = findContextElement(
+        node,
+        'i18nNoAdsDisclaimer',
+        /let advertisers influence what .+ says\.$/i
+      );
+      if (
+        applyContextualMap(node, text, noAdsContext, {
+          'Customize your experience across the agent, plugins, and product from the settings and marketplace. We won’t show you ads or let advertisers influence what':
+            '您可以通过设置和插件市场定制智能体、插件与产品的体验。我们不会向您展示广告，也不会让广告商影响',
+          "Customize your experience across the agent, plugins, and product from the settings and marketplace. We won't show you ads or let advertisers influence what":
+            '您可以通过设置和插件市场定制智能体、插件与产品的体验。我们不会向您展示广告，也不会让广告商影响',
+          'says.': '所生成的内容。',
+        })
+      ) {
+        return true;
+      }
+    }
+
+    if (CTX_ACCOUNT_SWITCH_TRIGGERS.has(text)) {
+      const accountSwitchContext = findContextElement(
+        node,
+        'i18nAccountSwitchHint',
+        /(?:To use another account, add it in the|To add another account, go to the|Sign in again to use Voice\.|open macOS Privacy & Security\.)/i
+      );
+      if (
+        applyContextualMap(node, text, accountSwitchContext, {
+          'Signed in as': '当前已登录为',
+          '. To use another account, add it in the': '。如需使用其他账户，请在',
+          '. To add another account, go to the': '。如需添加其他账户，请前往',
+          'tab.': '选项卡中添加。',
+          'Sign in again': '重新登录',
+          'to use Voice.': '以使用语音功能。',
+          'Click': '点击',
+          'to open macOS Privacy & Security.': '以打开 macOS 隐私与安全性设置。',
+        })
+      ) {
+        return true;
+      }
     }
 
     // 2.35.0 Computer Use 系统设置权限向导混合内联文本
-    const computerPermGuideCtx = findContextElement(
-      node,
-      'i18nComputerPermGuide',
-      /(?:In System Settings,\s*(?:turn on|click\s*\+)|在“系统设置”中，)/i
-    );
+    if (CTX_COMPUTER_PERM_TRIGGERS.has(text)) {
+      const computerPermGuideCtx = findContextElement(
+        node,
+        'i18nComputerPermGuide',
+        /(?:In System Settings,\s*(?:turn on|click\s*\+)|在“系统设置”中，)/i
+      );
+      if (
+        applyContextualMap(node, text, computerPermGuideCtx, {
+          'In System Settings, turn on': '在“系统设置”中，开启 ',
+          'In System Settings, click': '在“系统设置”中，点击 ',
+          ', choose': '，选择 ',
+          ', then turn it on.': '，然后将其开启。',
+          'Already on? Select': '已经开启？请选中 ',
+          ', click': '，点击 ',
+          ', then': '，然后',
+          'drag it back in from the small window.': '从提示小窗将其拖回列表。',
+          'click': '点击 ',
+          'and add it again.': ' 并重新添加。',
+        })
+      ) {
+        return true;
+      }
+    }
+
+    if (CTX_AGENT_MODEL_TRIGGERS.has(text)) {
+      const agentModelHintContext = findContextElement(
+        node,
+        'i18nAgentModelHint',
+        /^Agent:\s*.+\.\s*Change it in the model menu\.$/i
+      );
+      if (
+        applyContextualMap(node, text, agentModelHintContext, {
+          'Agent:': '智能体：',
+          '. Change it in the model menu.': '。可在模型菜单中更改。',
+        })
+      ) {
+        return true;
+      }
+    }
+
     if (
-      applyContextualMap(node, text, computerPermGuideCtx, {
-        'In System Settings, turn on': '在“系统设置”中，开启 ',
-        'In System Settings, click': '在“系统设置”中，点击 ',
-        ', choose': '，选择 ',
-        ', then turn it on.': '，然后将其开启。',
-        'Already on? Select': '已经开启？请选中 ',
-        ', click': '，点击 ',
-        ', then': '，然后',
-        'drag it back in from the small window.': '从提示小窗将其拖回列表。',
-        'click': '点击 ',
-        'and add it again.': ' 并重新添加。',
-      })
+      text === 'Controls the actions the agent can take.' ||
+      /^Modified in\s*$/i.test(text) ||
+      /^projects?$/i.test(text)
     ) {
-      return true;
+      const globalPermissionsContext = findContextElement(
+        node,
+        'i18nGlobalPermissionsSummary',
+        /Controls the actions the agent can take\.\s*Modified in\s+\d+\s+projects?/i
+      );
+      if (globalPermissionsContext) {
+        if (text === 'Controls the actions the agent can take.') { node.nodeValue = '控制智能体可以执行的操作。'; return true; }
+        if (/^Modified in\s*$/i.test(text)) { node.nodeValue = '已在 '; return true; }
+        if (/^projects?$/i.test(text)) { node.nodeValue = ' 个项目中修改'; return true; }
+      }
     }
 
-    const agentModelHintContext = findContextElement(
-      node,
-      'i18nAgentModelHint',
-      /^Agent:\s*.+\.\s*Change it in the model menu\.$/i
-    );
-    if (
-      applyContextualMap(node, text, agentModelHintContext, {
-        'Agent:': '智能体：',
-        '. Change it in the model menu.': '。可在模型菜单中更改。',
-      })
-    ) {
-      return true;
-    }
-
-    const globalPermissionsContext = findContextElement(
-      node,
-      'i18nGlobalPermissionsSummary',
-      /Controls the actions the agent can take\.\s*Modified in\s+\d+\s+projects?/i
-    );
-    if (globalPermissionsContext) {
-      if (text === 'Controls the actions the agent can take.') { node.nodeValue = '控制智能体可以执行的操作。'; return true; }
-      if (/^Modified in\s*$/i.test(text)) { node.nodeValue = '已在 '; return true; }
-      if (/^projects?$/i.test(text)) { node.nodeValue = ' 个项目中修改'; return true; }
-    }
-
-    if (node.parentElement && isSettingsContext(node.parentElement) && hasOwn.call(SETTINGS_CONTEXT_TRANSLATIONS, text)) {
+    if (hasOwn.call(SETTINGS_CONTEXT_TRANSLATIONS, text) && node.parentElement && isSettingsContext(node.parentElement)) {
       node.nodeValue = node.nodeValue.replace(text, SETTINGS_CONTEXT_TRANSLATIONS[text]);
       return true;
     }
@@ -744,52 +849,80 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
       }
     }
 
-    const rawNodes = Array.from(element.childNodes);
-    const fullNormalized = rawNodes.length > 1 ? String(element.textContent || '').replace(/\s+/g, ' ').trim() : '';
-    const skipAdjacentRunMerge =
-      fullNormalized &&
-      /(?:Permanently delete .+ including \d+ active|Also includes (?:Global Permissions|global settings) when working|This project was created for (?:the .+ |an )automation\.|Learn more about\s+(?:Default|Full machine|Turbo mode|Inherit Global|Custom)|Plugins are packaged collections of skills|let advertisers influence what .+ says\.|To use another account, add it in the|To add another account, go to the|open macOS Privacy & Security\.|In System Settings,\s*(?:turn on|click \+)|Controls the actions the agent can take\.\s*Modified in\s+\d+\s+projects?)/i.test(
-        fullNormalized
-      );
-    if (rawNodes.length > 1 && !skipAdjacentRunMerge) {
-      let run = [];
-      const flushRun = () => {
-        const nonEmpty = run.filter((n) => n.nodeValue && n.nodeValue.trim());
-        if (nonEmpty.length >= 2) {
-          const combined = nonEmpty.map((n) => n.nodeValue).join('').replace(/\s+/g, ' ').trim();
-          if (combined && combined.length <= 2000) {
-            const tr = translateString(combined);
-            if (tr && tr !== combined) {
-              const leadMatch = nonEmpty[0].nodeValue.match(/^\s+/);
-              const prefix = leadMatch ? leadMatch[0] : '';
-              nonEmpty[0].nodeValue = prefix + tr;
-              nonEmpty[0]._agyOriginal = nonEmpty[0].nodeValue;
-              for (let k = 1; k < nonEmpty.length; k++) {
-                nonEmpty[k].nodeValue = '';
-                nonEmpty[k]._agyOriginal = '';
+    const rawNodes = element.childNodes;
+    const rawLen = rawNodes ? rawNodes.length : 0;
+    // 仅当存在 >= 2 个相邻非空文本节点时才合并检查，彻底避免对大容器元素反复拼接整棵子树 textContent 造成卡顿
+    let hasAdjacentNonEmptyText = false;
+    let consecText = 0;
+    for (let i = 0; i < rawLen; i++) {
+      const ch = rawNodes[i];
+      if (ch.nodeType === 3) {
+        if (ch.nodeValue && ch.nodeValue.trim()) {
+          consecText++;
+          if (consecText >= 2) {
+            hasAdjacentNonEmptyText = true;
+            break;
+          }
+        }
+      } else {
+        consecText = 0;
+      }
+    }
+
+    if (hasAdjacentNonEmptyText) {
+      const fullNormalized = String(element.textContent || '').replace(/\s+/g, ' ').trim();
+      const skipAdjacentRunMerge =
+        fullNormalized &&
+        /(?:Permanently delete .+ including \d+ active|Also includes (?:Global Permissions|global settings) when working|This project was created for (?:the .+ |an )automation\.|Learn more about\s+(?:Default|Full machine|Turbo mode|Inherit Global|Custom)|Plugins are packaged collections of skills|let advertisers influence what .+ says\.|To use another account, add it in the|To add another account, go to the|open macOS Privacy & Security\.|In System Settings,\s*(?:turn on|click \+)|Controls the actions the agent can take\.\s*Modified in\s+\d+\s+projects?)/i.test(
+          fullNormalized
+        );
+      if (!skipAdjacentRunMerge) {
+        let run = [];
+        const flushRun = () => {
+          const nonEmpty = run.filter((n) => n.nodeValue && n.nodeValue.trim());
+          if (nonEmpty.length >= 2) {
+            const combined = nonEmpty.map((n) => n.nodeValue).join('').replace(/\s+/g, ' ').trim();
+            if (combined && combined.length <= 2000) {
+              const tr = translateString(combined);
+              if (tr && tr !== combined) {
+                const leadMatch = nonEmpty[0].nodeValue.match(/^\s+/);
+                const prefix = leadMatch ? leadMatch[0] : '';
+                nonEmpty[0].nodeValue = prefix + tr;
+                nonEmpty[0]._agyOriginal = nonEmpty[0].nodeValue;
+                for (let k = 1; k < nonEmpty.length; k++) {
+                  nonEmpty[k].nodeValue = '';
+                  nonEmpty[k]._agyOriginal = '';
+                }
               }
             }
           }
+          run = [];
+        };
+        for (let i = 0; i < rawLen; i++) {
+          if (rawNodes[i].nodeType === 3) {
+            run.push(rawNodes[i]);
+          } else if (run.length > 0) {
+            flushRun();
+          }
         }
-        run = [];
-      };
-      for (let i = 0; i < rawNodes.length; i++) {
-        if (rawNodes[i].nodeType === 3) {
-          run.push(rawNodes[i]);
-        } else if (run.length > 0) {
-          flushRun();
-        }
+        if (run.length > 0) flushRun();
       }
-      if (run.length > 0) flushRun();
     }
 
-    const childElements = Array.from(element.children || []);
-    if (childElements.length > 2) return;
-    if (childElements.some((child) => child.textContent && child.textContent.trim())) return;
+    const childElements = element.children;
+    const childElLen = childElements ? childElements.length : 0;
+    if (childElLen > 2) return;
+    for (let i = 0; i < childElLen; i++) {
+      if (childElements[i].textContent && childElements[i].textContent.trim()) return;
+    }
 
-    const textNodes = Array.from(element.childNodes).filter(
-      (child) => child.nodeType === 3 && child.nodeValue && child.nodeValue.trim()
-    );
+    const textNodes = [];
+    for (let i = 0; i < rawLen; i++) {
+      const ch = rawNodes[i];
+      if (ch.nodeType === 3 && ch.nodeValue && ch.nodeValue.trim()) {
+        textNodes.push(ch);
+      }
+    }
     if (textNodes.length === 0) return;
 
     const text = element.textContent.trim();
@@ -809,13 +942,12 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
     }
   }
 
-  function translateNode(node) {
+  function translateNode(node, ancestorChecked = false) {
     if (!node) return;
 
     try {
       if (node.nodeType === 1) {
-        if (shouldSkipElement(node)) return;
-        if (node.dataset && node.dataset.i18nTranslated === 'skip') return;
+        if (ancestorChecked ? isProtectedBoundary(node) : shouldSkipElement(node)) return;
 
         translateAttributes(node);
         if (node.tagName === 'TEXTAREA' || node.tagName === 'INPUT') return;
@@ -825,10 +957,11 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
         const children = node.childNodes;
         if (children) {
           for (let i = 0; i < children.length; i++) {
-            translateNode(children[i]);
+            translateNode(children[i], true);
           }
         }
       } else if (node.nodeType === 3) {
+        if (!ancestorChecked && node.parentElement && shouldSkipElement(node.parentElement)) return;
         translateTextNode(node);
       }
     } catch {}
@@ -845,20 +978,34 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
     for (let i = 0; i < mutations.length; i++) {
       const mutation = mutations[i];
       if (mutation.type === 'childList') {
+        if (mutation.target && mutation.target.nodeType === 1 && shouldSkipElement(mutation.target)) {
+          continue;
+        }
         const added = mutation.addedNodes;
         for (let j = 0; j < added.length; j++) {
           const node = added[j];
-          if (node.nodeType === 1 || node.nodeType === 3) {
+          if (node.nodeType === 1) {
+            if (!isProtectedBoundary(node)) {
+              pendingNodes.add(node);
+            }
+          } else if (node.nodeType === 3) {
             pendingNodes.add(node);
           }
         }
       } else if (mutation.type === 'characterData') {
         if (mutation.target) {
+          if (mutation.target.parentElement && shouldSkipElement(mutation.target.parentElement)) {
+            continue;
+          }
           mutation.target._agyOriginal = undefined;
           pendingNodes.add(mutation.target);
         }
       } else if (mutation.type === 'attributes') {
-        if (mutation.target && TRANSLATABLE_ATTRS.includes(mutation.attributeName)) {
+        if (
+          mutation.target &&
+          TRANSLATABLE_ATTRS.includes(mutation.attributeName) &&
+          !shouldSkipElement(mutation.target)
+        ) {
           pendingNodes.add(mutation.target);
         }
       }
@@ -957,12 +1104,12 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
     return activeObserver;
   }
 
+  // 注意：刻意不包含 [role="dialog"] / [role="alertdialog"]（模态窗口已由 MutationObserver 增量翻译，
+  // 避免在设置窗口内每移动一次鼠标就触发 4 遍全弹窗递归重扫导致明显卡顿！）
   const HOVER_PORTAL_SELECTOR = [
     '[role="tooltip"]',
     '[role="menu"]',
     '[role="listbox"]',
-    '[role="dialog"]',
-    '[role="alertdialog"]',
     '[data-floating-ui-portal]',
     '[data-radix-popper-content-wrapper]',
     '[data-base-ui-portal]',
@@ -977,14 +1124,19 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
 
   function translateHoverPortals(hoveredRoot) {
     if (typeof document === 'undefined' || !document.body || !document.querySelectorAll) return;
+    const portals = document.querySelectorAll(HOVER_PORTAL_SELECTOR);
+    const hoverCards =
+      hoveredRoot && hoveredRoot.nodeType === 1 && !shouldSkipElement(hoveredRoot) && hoveredRoot.querySelectorAll
+        ? hoveredRoot.querySelectorAll('[class*="group-hover/"]')
+        : null;
+    if (portals.length === 0 && (!hoverCards || hoverCards.length === 0)) return;
+
     disconnectObserver();
     try {
-      const portals = document.querySelectorAll(HOVER_PORTAL_SELECTOR);
       for (let i = 0; i < portals.length; i++) {
         translateNode(portals[i]);
       }
-      if (hoveredRoot && hoveredRoot.nodeType === 1 && hoveredRoot.querySelectorAll) {
-        const hoverCards = hoveredRoot.querySelectorAll('[class*="group-hover/"]');
+      if (hoverCards) {
         for (let j = 0; j < hoverCards.length; j++) {
           translateNode(hoverCards[j]);
         }
@@ -1009,29 +1161,49 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
 
     const onHover = (e) => {
       const target = e && e.target && e.target.nodeType === 1 ? e.target : null;
+      if (!target || shouldSkipElement(target)) return;
       const now = Date.now();
-      if (target && target === lastHoverTarget && now - lastHoverTime < 60) return;
+      if (target === lastHoverTarget && now - lastHoverTime < 80) return;
       lastHoverTarget = target;
       lastHoverTime = now;
 
-      let interactiveRoot = target;
-      if (target) {
+      let interactiveRoot = null;
+      const nodesToCheckAttr = [];
+      let anc = target;
+      for (let d = 0; anc && d < 6; d++) {
+        if (isProtectedBoundary(anc)) return;
+        nodesToCheckAttr.push(anc);
+        if (
+          (anc.className && typeof anc.className === 'string' && anc.className.indexOf('group/') !== -1) ||
+          (anc.hasAttribute &&
+            (anc.hasAttribute('data-tooltip-id') ||
+              anc.hasAttribute('aria-describedby') ||
+              anc.hasAttribute('data-tooltip')))
+        ) {
+          interactiveRoot = anc;
+        }
+        anc = anc.parentElement;
+      }
+
+      // 仅当目标链路确有未缓存的可翻译属性时才暂停/恢复 Observer，减少鼠标滑动开销
+      let hasUncachedAttr = false;
+      for (let k = 0; k < nodesToCheckAttr.length && !hasUncachedAttr; k++) {
+        const el = nodesToCheckAttr[k];
+        if (!el.getAttribute) continue;
+        for (let a = 0; a < TRANSLATABLE_ATTRS.length; a++) {
+          const attr = TRANSLATABLE_ATTRS[a];
+          const val = el.getAttribute(attr);
+          if (val && el['_agyAttr_' + attr] !== val) {
+            hasUncachedAttr = true;
+            break;
+          }
+        }
+      }
+      if (hasUncachedAttr) {
         disconnectObserver();
         try {
-          translateAttributes(target);
-          let anc = target.parentElement;
-          for (let d = 0; anc && d < 6; d++) {
-            translateAttributes(anc);
-            if (
-              (anc.className && typeof anc.className === 'string' && anc.className.indexOf('group/') !== -1) ||
-              (anc.hasAttribute &&
-                (anc.hasAttribute('data-tooltip-id') ||
-                  anc.hasAttribute('aria-describedby') ||
-                  anc.hasAttribute('data-tooltip')))
-            ) {
-              interactiveRoot = anc;
-            }
-            anc = anc.parentElement;
+          for (let k = 0; k < nodesToCheckAttr.length; k++) {
+            translateAttributes(nodesToCheckAttr[k]);
           }
         } finally {
           reconnectObserver();
@@ -1043,7 +1215,7 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
       if (typeof window !== 'undefined' && window.requestAnimationFrame) {
         window.requestAnimationFrame(scan);
       }
-      for (const delay of [45, 220, 360]) {
+      for (const delay of [65, 240]) {
         hoverTimers.push(setTimeout(scan, delay));
       }
     };
@@ -1106,19 +1278,23 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
 
     let retryCount = 0;
     const earlyInterval = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       translatePage();
       retryCount++;
-      if (retryCount >= 10) {
+      if (retryCount >= 8) {
         clearInterval(earlyInterval);
         setInterval(() => {
+          if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
           if (typeof window !== 'undefined' && window.requestIdleCallback) {
-            window.requestIdleCallback(() => translatePage(), { timeout: 5000 });
+            window.requestIdleCallback(() => {
+              if (document.visibilityState !== 'hidden') translatePage();
+            }, { timeout: 5000 });
           } else {
             translatePage();
           }
-        }, 15000);
+        }, 30000);
       }
-    }, 500);
+    }, 600);
   }
 
   if (typeof document !== 'undefined') {

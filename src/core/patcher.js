@@ -381,6 +381,8 @@ ${ZH_PRELOAD_MARKER_END}\n`;
                 const _path = require('path');
                 const targetWc = typeof getHubWebContents === 'function' ? getHubWebContents(win) : win.webContents;
                 if (!targetWc || targetWc.isDestroyed?.()) return;
+                const curUrl = typeof targetWc.getURL === 'function' ? targetWc.getURL() : '';
+                if (!/^https?:\\/\\/(127\\.0\\.0\\.1|localhost)(?::\\d+)?(?:\\/|\\?|#|$)/i.test(curUrl || '')) return;
                 let zhPath = _path.join(process.resourcesPath || '', 'ag-zh-i18n.js');
                 if (!_fs.existsSync(zhPath)) {
                     zhPath = _path.join(process.env.APPDATA || '', 'AntigravityChinesePatch', 'ag-zh-i18n.js');
@@ -392,9 +394,17 @@ ${ZH_PRELOAD_MARKER_END}\n`;
             } catch {}
         };
         const __zhWc = typeof getHubWebContents === 'function' ? getHubWebContents(win) : win.webContents;
-        __zhWc?.on?.('dom-ready', __zhInjectWin);
-        __zhWc?.on?.('did-finish-load', __zhInjectWin);
-        __zhWc?.on?.('did-navigate', __zhInjectWin);
+        if (__zhWc) {
+            if (!__zhWc.__agyZhUtilsBound) {
+                __zhWc.__agyZhUtilsBound = true;
+                __zhWc.on?.('dom-ready', __zhInjectWin);
+                __zhWc.on?.('did-finish-load', __zhInjectWin);
+                __zhWc.on?.('did-navigate', __zhInjectWin);
+            }
+            if (typeof __zhWc.isLoadingMainFrame !== 'function' || !__zhWc.isLoadingMainFrame()) {
+                __zhInjectWin();
+            }
+        }
     }
     ${ZH_UTILS_MARKER_END}`;
       const insertPos = anchorIdx + matchedAnchor.length;
