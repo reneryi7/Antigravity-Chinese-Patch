@@ -1,5 +1,5 @@
 /**
- * Antigravity 中文汉化补丁 v4.0 - 词库格式、去重排序、纯 ASCII 脚本与无个人痕迹静态检查器
+ * Antigravity 中文汉化补丁 v4.1 - 词库格式、去重排序、纯 ASCII 脚本与无个人痕迹静态检查器
  */
 
 'use strict';

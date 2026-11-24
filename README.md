@@ -1,10 +1,10 @@
-# Antigravity 中文汉化补丁 (v4.0)
+# Antigravity 中文汉化补丁 (v4.1)
 
-![Version](https://img.shields.io/badge/版本-v4.0.0-blue)
+![Version](https://img.shields.io/badge/版本-v4.1.0-blue)
 ![Antigravity](https://img.shields.io/badge/适配版本-Antigravity%202.12.x%20~%202.35.0%2B-brightgreen)
 ![Platform](https://img.shields.io/badge/平台-Windows%2010%2F11-0078D6)
 ![Dependencies](https://img.shields.io/badge/外部依赖-0%20Dependencies-success)
-![Dictionary](https://img.shields.io/badge/词条规模-7246%2B%20精确%20%7C%20725%2B%20动态正则-orange)
+![Dictionary](https://img.shields.io/badge/词条规模-8320%2B%20精确%20%7C%20725%2B%20动态正则-orange)
 
 面向 [Google Antigravity](https://antigravity.google/) 桌面客户端打造的**模块化、零外部依赖、全自动路径探测、支持零重启实时热汉化与更新自愈**的开源中文汉化补丁。
 
@@ -12,33 +12,34 @@
 
 ---
 
-## ✨ v4.0 核心亮点
+## ✨ v4.1 核心亮点
 
-1. **全面适配 Antigravity 2.35.0+ 全新特性（四大词源无死角覆盖）**
+1. **AI 智能体原生术语全面精校 + 插件市场 106 款扩展内部子技能 100% 全覆盖**
+   - **地道 Agent 工程化表达**：深度排查并修正生硬机翻与商业错译（例如将智能体上下文中的 `Plan` 修正为 `计划`、设置页配额上下文精准区分 `订阅方案`；`Implementation Plan` 译为 `实施方案`、`Walkthrough` 译为 `执行总结`、`Proceed` 译为 `继续执行`、大模型 `Token` 与身份认证 `令牌` 严格区分，修复 16 处图标选择器名词污染）；
+   - **斜杠命令与 `@` 提及芯片零误伤保护**：精准保护对话输入框中的 `/plan`、`/boost`、`/goal`、`/swarm`、`@research` 等交互芯片与命令标识符，彻底杜绝将斜杠命令误翻为中文；
+   - **106 款远程市场扩展详情页全汉化**：完整提取并翻译 Google 官方与合作伙伴市场全部 106 款插件包内的 **799+ 条子技能 (`Skills`)、子智能体 (`Agents`)、护栏规则 (`Rules`) 与伴生面板简介**，点开任意插件均实现从顶部概要、推荐提示词到底部子技能列表的全中文呈现。
+2. **全面适配 Antigravity 2.35.0+ 全新特性（四大词源无死角覆盖）**
    - 完整覆盖 **设置 → 通用** 全新双界面布局（`知识办公 / Knowledge Work` 与 `软件工程 / Software Engineering`）、权限预设、文件/网络访问规则、输入框发送策略；
    - 完整覆盖 **自定义 → 插件市场** 全部货架分类（`设计、创意与媒体`、`科学研究`、`效率与项目管理`、`云托管与部署`、`开发者工具`、`商业与企业服务` 等）及 `Gemini API`、科学套件等最新插件简介；
    - 完整覆盖 **2.35.0 新增核心子系统**：编排器双模型设置（`Orchestrator` / `Executor`）、思考深度（`Thinking effort`）、电脑操控（`Computer Use`）与实时画面预览、内置浏览器浏览数据与单站点 Cookie 管理、快捷键方案切换（`VS Code` / `AGY`）、语音听写多语言优先级、收件箱分组与自动解决（`Working Section` / `Auto-Resolve`）、插件细粒度权限管理以及远程 SSH 共享主目录接管与断线重连页。
-2. **防版本退化翻译引擎**
-   - **智能大小写不敏感回退索引**：自动免疫官方在 `Title Case` 与 `Sentence case` 之间调整文案风格导致的词条失效；
+3. **防版本退化翻译引擎**
+   - **智能多词大小写不敏感回退索引**：自动免疫官方在 `Title Case` 与 `Sentence case` 之间调整文案风格导致的词条失效，同时严格跳过单词命令标识符；
    - **长描述省略号截断自适应**：自动匹配卡片被截断加 `...` / `…` 的长简介；
-   - **严格代码与终端零误伤保护**：自动跳过 Monaco 代码编辑器、Xterm 终端、`<code>`/`<pre>` 代码块与模型名称选择器，绝不污染代码内容。
-3. **跨环境零配置一键安装**
+   - **严格代码与终端零误伤保护**：自动跳过 Monaco 代码编辑器、Xterm 终端、`<code>`/`<pre>` 代码块、模型名称选择器与斜杠命令芯片，绝不污染代码内容。
+4. **跨环境零配置一键安装 + 四通道零重启热汉化与更新自愈**
    - **五级智能安装路径探测**：自动通过 `Windows 注册表 Uninstall 项 -> 运行中进程 -> PATH CLI -> 标准安装目录 -> 图形化文件夹选择框兜底` 精准定位客户端，无论装在哪个盘都能一键识别；
-   - **系统目录自动提权**：若客户端安装在 `C:\Program Files\Antigravity`，自动触发管理员权限（UAC）完成写入；
-   - **纯内存极速 ASAR 引擎**：无需解压到 `%TEMP%` 临时目录，直接在内存中重组二进制流并重算 4MB 分块 SHA256 Integrity，彻底杜绝杀毒软件拦截与 `EPERM` 文件锁报错。
-4. **四通道注入 + 零重启实时热汉化 + 全自动更新自愈**
-   - **即装即显**：若安装时 Antigravity 窗口正处于打开状态，内置零依赖原生 WebSocket CDP 客户端会在 **1 秒内将当前英文窗口原地热切换为中文**，无需中断正在进行的对话；
-   - **更新不失效**：内置动态路径绑定的同步更新事务代理（`update_runner.vbs`）与轻量守护服务（`auto_heal.vbs`），无论是点击软件内“重启以更新”还是下载新版安装包手动覆盖，均自动保持中文界面（亦支持 `--no-daemon` 纯静态无驻留模式）。
+   - **系统目录自动提权 & 纯内存极速 ASAR 引擎**：支持 `Program Files` 自动 UAC 提权，直接在内存中重组二进制流并重算 4MB 分块 SHA256 Integrity；
+   - **即装即显 & 更新不失效**：安装时已打开窗口 1 秒内原地热切换为中文；内置动态路径更新自愈服务（`update_runner.vbs` + `auto_heal.vbs`），客户端更新后自动保持中文界面（亦支持 `--no-daemon` 纯静态模式）。
 
 ---
 
 ## 🚀 快速开始（普通用户只需 2 步）
 
 1. **下载并解压**
-   - 前往本仓库 **[Releases 页面](../../releases/latest)** 下载最新 `Antigravity-Chinese-Patch-v4.0.0.zip`（或点击右上角绿色的 `<> Code` → `Download ZIP`），将其**完整解压**到任意文件夹。
+   - 前往本仓库 **[Releases 页面](../../releases/latest)** 下载最新 `Antigravity-Chinese-Patch-v4.1.0.zip`（或点击右上角绿色的 `<> Code` → `Download ZIP`），将其**完整解压**到任意文件夹。
    - ⚠️ *注意：请勿直接在压缩包预览窗口内双击运行脚本，必须先解压！*
 2. **双击运行 `install.bat`**
-   - 看到 **`✓ Antigravity 中文汉化补丁 v4.0.0 安装成功！`** 提示即告完成。
+   - 看到 **`✓ Antigravity 中文汉化补丁 v4.1.0 安装成功！`** 提示即告完成。
    - 当前已打开的窗口会实时变为中文；在方便时重启一次客户端，顶部系统原生菜单与托盘菜单也会全部变为中文。
 
 ### 🧹 如何卸载（恢复官方英文原版）
@@ -52,15 +53,16 @@
 
 ```text
 Antigravity-Chinese-Patch/
-├── locales/zh-CN/             # 模块化中文词库（扁平 JSON，按字母序排列）
-│   ├── ui-core.json           # 主界面、侧边栏、收件箱、对话流与通用组件
-│   ├── settings.json          # 设置中心全模块（双布局、权限、编排器、浏览器、快捷键等）
-│   ├── marketplace.json       # 自定义市场货架分类 (Shelves) 与官方/第三方插件简介
-│   ├── skills-agents.json     # 内置技能、子智能体、蜂群 (Swarm)、自动化与引导角色卡片
-│   ├── remote-computer.json   # Computer Use 电脑操控、WSL、SSH 远程与通行密钥认证
-│   ├── settings-context.json  # 设置界面特定短词上下文映射
-│   ├── patterns.js            # 动态正则表达式、跨节点混合语义规则与局部替换表
-│   └── main-process.js        # Electron 主进程 dist/*.js 静态替换与原生菜单/弹窗词表
+├── locales/zh-CN/               # 模块化中文词库（扁平 JSON，按字母序排列）
+│   ├── ui-core.json             # 主界面、侧边栏、收件箱、对话流与通用组件
+│   ├── settings.json            # 设置中心全模块（双布局、权限、编排器、浏览器、快捷键等）
+│   ├── marketplace.json         # 自定义市场货架分类 (Shelves)、插件简介与推荐提示词
+│   ├── marketplace-skills.json  # 远程市场全部 106 款扩展内部子技能、子智能体与规则简介
+│   ├── skills-agents.json       # 内置技能、子智能体、蜂群 (Swarm)、自动化与引导角色卡片
+│   ├── remote-computer.json     # Computer Use 电脑操控、WSL、SSH 远程与通行密钥认证
+│   ├── settings-context.json    # 设置界面特定短词上下文映射（如 Plan -> 订阅方案）
+│   ├── patterns.js              # 动态正则表达式、跨节点混合语义规则与局部替换表
+│   └── main-process.js          # Electron 主进程 dist/*.js 静态替换与原生菜单/弹窗词表
 ├── src/                       # 核心源码（100% Node.js 标准库实现）
 │   ├── cli.js                 # 统一命令行调度入口 (install / uninstall / status / daemon)
 │   ├── compiler.js            # 内存级极速词库合并与前端注入载荷编译器 (<30ms)

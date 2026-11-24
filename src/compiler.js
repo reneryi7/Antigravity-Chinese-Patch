@@ -1,5 +1,5 @@
 /**
- * Antigravity 中文汉化补丁 v4.0 - 零外部依赖内存级词库编译器
+ * Antigravity 中文汉化补丁 v4.1 - 零外部依赖内存级词库编译器
  *
  * 职责：
  * 1. 读取 locales/zh-CN/ 下的分类 JSON 词库与动态规则模块；
@@ -15,7 +15,7 @@ const { initAntigravityZhRuntime } = require('./runtime/engine-template.js');
 const { buildMainProcessHookCode } = require('./runtime/main-hook-template.js');
 const { PRELOAD_IPC_SNIPPET } = require('./runtime/preload-ipc-snippet.js');
 
-const PATCH_VERSION = '4.0.0';
+const PATCH_VERSION = '4.1.0';
 const TARGET_AGY_VERSION = '2.35.0';
 const PATCH_DICT_SIGNATURE = `v${PATCH_VERSION}-${TARGET_AGY_VERSION}`;
 
@@ -25,6 +25,7 @@ const EXACT_JSON_FILES = [
   'ui-core.json',
   'settings.json',
   'marketplace.json',
+  'marketplace-skills.json',
   'skills-agents.json',
   'remote-computer.json',
 ];
@@ -82,9 +83,7 @@ const __AGY_EXPORTS__ = __AGY_INIT_RUNTIME__({
   settingsContext: ${JSON.stringify(settingsContext)},
   createPatterns: __AGY_CREATE_PATTERNS__,
 });
-if (typeof module !== 'undefined' && module.exports && __AGY_EXPORTS__) {
-  module.exports = __AGY_EXPORTS__;
-}
+void __AGY_EXPORTS__;
 })();
 `;
 

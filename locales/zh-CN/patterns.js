@@ -10,6 +10,10 @@
 function createPatterns(helpers = {}) {
   const translateString = helpers.translateString || ((s) => s);
   const translateDuration = helpers.translateDuration || ((s) => s);
+  const translateExactOrPattern = helpers.translateExactOrPattern || ((s) => {
+    const res = translateString(s);
+    return res !== s ? res : null;
+  });
 
   const REGEX_TRANSLATIONS = [
   // --- 原有核心动态规则（确保 100% 向后兼容） ---
@@ -34,12 +38,12 @@ function createPatterns(helpers = {}) {
   [/^System Prompt Sections\s*\((\d+)\)$/i, '系统提示词部分（$1）'],
   [/^Rules\s*\(([^)]+)\)\s*(\d+)$/i, '规则（$1）$2'],
   [/^Skills\s*\(([^)]+)\)\s*(\d+)$/i, '技能（$1）$2'],
-  [/^Rules:\s*(\d+)\s+tokens?$/i, '规则：$1 个令牌'],
-  [/^Skills:\s*(\d+)\s+tokens?$/i, '技能：$1 个令牌'],
-  [/^Your Plan:\s*(.+)$/i, '当前套餐：$1'],
-  [/^([\d,]+)\s+tokens?\)$/i, '$1 个令牌）'],
-  [/^([\d,]+)\s+tokens? total\)$/i, '共 $1 个令牌）'],
-  [/^(Rules|Skills|Subagents|Mcp Tools):\s*([\d,]+)\s+tokens?$/i, (_, category, count) => `${translateString(category)}：${count} 个令牌`],
+  [/^Rules:\s*(\d+)\s+tokens?$/i, '规则：$1 Token'],
+  [/^Skills:\s*(\d+)\s+tokens?$/i, '技能：$1 Token'],
+  [/^Your Plan:\s*(.+)$/i, '当前订阅方案：$1'],
+  [/^([\d,]+)\s+tokens?\)$/i, '$1 Token）'],
+  [/^([\d,]+)\s+tokens? total\)$/i, '共 $1 Token）'],
+  [/^(Rules|Skills|Subagents|Mcp Tools):\s*([\d,]+)\s+tokens?$/i, (_, category, count) => `${translateString(category)}：${count} Token`],
   [/^(\d+)\s+tools?\s+(enabled|disabled)$/i, (_, count, state) => `${count} 个工具${state.toLowerCase() === 'enabled' ? '已启用' : '已禁用'}`],
   [/^Toggle\s+(.+)$/i, (_, target) => `切换 ${translateString(target) || target}`],
   [/^Scheduled task\s+"(.+)"$/i, '定时任务“$1”'],
@@ -144,7 +148,7 @@ function createPatterns(helpers = {}) {
   [/^Working directory:\s*(.+)$/i, '工作目录：$1'],
   [/^Process exited with code (\d+)\.?$/i, '进程已退出，退出码：$1。'],
   [/^Terminal process (.+) exited with non-zero code (\d+)$/i, '终端进程 $1 以非零代码 $2 退出'],
-  [/^Proceed with implementation plan and (\d+) comments?$/i, '带着 $1 条评论继续执行实施计划'],
+  [/^Proceed with implementation plan and (\d+) comments?$/i, '附带 $1 条批注继续执行实施方案'],
   [/^Publish (.+) to origin$/i, '将 $1 发布到远程 (origin)'],
   [/^Published (.+) to origin\.?$/i, '已将 $1 发布到远程 (origin)。'],
   [/^Push (\d+) commits? to (.+)$/i, '将 $1 个提交推送到 $2'],
@@ -706,6 +710,18 @@ function createPatterns(helpers = {}) {
   [/^Unfold lines\s+(\d+)-(\d+)$/i, '展开第 $1–$2 行'],
   [/^Fold lines\s+(\d+)-(\d+)$/i, '折叠第 $1–$2 行'],
   [/^Marked\s+(\d+)\s+conversations?\s+as read$/i, '已将 $1 个对话标记为已读'],
+  [/^See more in\s+(.+)$/i, (_, cat) => `查看“${translateString(cat) || cat}”中的更多内容`],
+  [/^See less in\s+(.+)$/i, (_, cat) => `收起“${translateString(cat) || cat}”`],
+  [/^Plugins in\s+(.+)$/i, (_, cat) => `“${translateString(cat) || cat}”中的插件`],
+  [/^(\d+)\s+MCP servers failed to start$/i, '$1 个 MCP 服务器启动失败'],
+  [/^Stream and control\s+(.+)\s+directly in the side pane\.$/i, '直接在侧边面板中流式预览并控制 $1。'],
+  [/^Applied\s+(.+)$/i, (_, name) => `已应用 ${translateString(name) || name}`],
+  [/^Apply\s+(.+)$/i, (_, name) => `应用 ${translateString(name) || name}`],
+  [/^(.+),\s*all already installed\.\s*Adding the bundle installs plugins it gains later\.$/i, '$1（均已安装）。添加此插件包后，未来新增的插件也会自动安装。'],
+  [/^(.+)\.\s*Adding the bundle installs plugins it gains later\.$/i, '$1。添加此插件包后，未来新增的插件也会自动安装。'],
+  [/^(.+)\.\s*Add bundle installs it\.$/i, '$1。点击“添加插件包”即可安装。'],
+  [/^(.+)\.\s*Add bundle installs all of them\.$/i, '$1。点击“添加插件包”即可全部安装。'],
+  [/^(.+)\.\s*Add bundle installs\s+(.+);\s*the ones you already have stay as they are\.$/i, '$1。点击“添加插件包”将安装 $2；已安装的插件将保持不变。'],
   [/^See\s+(\d+)\s+more\s*(.*)$/i, (_, n, rest) => `再显示 ${n} 项${rest ? ' ' + (translateExactOrPattern(rest) || rest) : ''}`],
   [/^See more\s+(.+)$/i, (_, rest) => `查看更多 ${translateExactOrPattern(rest) || rest}`],
   [/^Hey\s+([^!]{1,40})!$/i, '嗨，$1！'],
@@ -2117,15 +2133,15 @@ const PARTIAL_TRANSLATIONS = [
   ],
   [
     "Commands the agent can run outside the sandbox in this workspace.",
-    "智能体可在此工作区的沙盒外运行的命令。"
+    "智能体可在此工作区的沙箱外运行的命令。"
   ],
   [
     "Commands the agent can run outside the sandbox.",
-    "智能体可在沙盒外运行的命令。"
+    "智能体可在沙箱外运行的命令。"
   ],
   [
     "Confirm the command is safe to run outside of the sandbox with full network and disk access.",
-    "请确认该命令可在沙盒外安全运行，并拥有完整网络和磁盘访问权限。"
+    "请确认该命令可在沙箱外安全运行，并拥有完整网络和磁盘访问权限。"
   ],
   [
     "Controls whether terminal commands require your approval before running.",
@@ -2261,7 +2277,7 @@ const PARTIAL_TRANSLATIONS = [
   ],
   [
     "When enabled, sandboxed commands are allowed to make network requests.",
-    "启用后，沙盒命令可以发起网络请求。"
+    "启用后，沙箱命令可以发起网络请求。"
   ],
   [
     "When enabled, the agent will be able to access past conversations to inform its responses.",

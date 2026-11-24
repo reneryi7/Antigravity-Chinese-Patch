@@ -1,7 +1,7 @@
 /**
- * Antigravity 中文汉化补丁 v4.0 - 最小化纯净 GitHub Release 构建与安全校验工具
+ * Antigravity 中文汉化补丁 v4.1 - 最小化纯净 GitHub Release 构建与安全校验工具
  *
- * 输出目录：dist-release/Antigravity-Chinese-Patch-v4.0.0/ 及对应 .zip 压缩包
+ * 输出目录：dist-release/Antigravity-Chinese-Patch-v4.1.0/ 及对应 .zip 压缩包
  * 严格校验：确保发布包中零个人文件、零原始 .asar 快照、零本机硬编码路径泄漏！
  */
 
@@ -102,11 +102,8 @@ function verifyStageCleanliness(dir) {
 }
 
 function main() {
-  if (fs.existsSync(STAGE_DIR)) {
-    fs.rmSync(STAGE_DIR, { recursive: true, force: true });
-  }
-  if (fs.existsSync(ZIP_PATH)) {
-    fs.unlinkSync(ZIP_PATH);
+  if (fs.existsSync(OUT_BASE)) {
+    fs.rmSync(OUT_BASE, { recursive: true, force: true });
   }
   fs.mkdirSync(STAGE_DIR, { recursive: true });
 

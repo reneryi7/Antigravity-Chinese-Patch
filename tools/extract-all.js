@@ -1,5 +1,5 @@
 /**
- * Antigravity 中文汉化补丁 v4.0 - 四源合一全自动英文提取与覆盖率审计器
+ * Antigravity 中文汉化补丁 v4.1 - 四源合一全自动英文提取与覆盖率审计器
  *
  * 同时扫描以下四大文本源（零硬编码本机路径）：
  * 1. Web 前端实时 Bundle：从运行中的 language_server HTTPS 端口（或本地指定 JS）执行词法级 AST 字符串扫描；
@@ -281,6 +281,7 @@ function scanLocalSkillsAndPlugins() {
     if (!raw || typeof raw !== 'string') return;
     const norm = raw.replace(/\s+/g, ' ').trim();
     if (!norm || norm.length < 2 || !/[A-Za-z]{2,}/.test(norm) || seen.has(norm)) return;
+    if (/^[a-z0-9_-]+$/.test(norm)) return;
     if (BRAND_PROPER_NOUNS.has(norm)) return;
     seen.add(norm);
     total++;
@@ -296,6 +297,8 @@ function scanLocalSkillsAndPlugins() {
     for (const [k, v] of Object.entries(node)) {
       if (typeof v === 'string' && /^(?:displayName|description|shortDescription|longDescription|category)$/i.test(k)) {
         checkField(v);
+      } else if (k === 'suggestedPrompts' && Array.isArray(v)) {
+        v.forEach((item) => { if (typeof item === 'string') checkField(item); });
       } else if (typeof v === 'object') {
         walkJson(v);
       }
@@ -483,7 +486,7 @@ async function main() {
   const paths = getClientPaths(agDir);
 
   console.log('='.repeat(68));
-  console.log('  Antigravity v4.0 四源合一英文词条覆盖率审计报告');
+  console.log('  Antigravity v4.1 四源合一英文词条覆盖率审计报告');
   console.log('='.repeat(68));
 
   const skillStats = scanLocalSkillsAndPlugins();

@@ -1,5 +1,5 @@
 /**
- * Antigravity 中文汉化补丁 v4.0 - 全面单元测试与 Antigravity 2.35.0 架构回归测试套件
+ * Antigravity 中文汉化补丁 v4.1 - 全面单元测试与 Antigravity 2.35.0 架构回归测试套件
  */
 
 'use strict';
@@ -120,6 +120,12 @@ const samples = [
   ['Genomics', '基因组学 (Genomics)'],
   ['Structural Biology', '结构生物学 (Structural Biology)'],
   ['Chemistry', '化学信息学 (Chemistry)'],
+  ['See more in Build with Google', '查看“使用 Google 构建”中的更多内容'],
+  ['See more in Design, Creative & Media', '查看“设计、创意与媒体”中的更多内容'],
+  ['See less in Science', '收起“科学研究”'],
+  ['Create, edit, review, resize, and brand-check Canva designs with the Canva MCP server.', '通过 Canva MCP 服务器创建、编辑、审阅、调整尺寸并检查 Canva 设计的品牌规范。'],
+  ['Resize this Canva design for Instagram and LinkedIn', '将此 Canva 设计调整为适配 Instagram 和 LinkedIn 的尺寸'],
+  ['No initial state specified for compound state node', 'No initial state specified for compound state node'],
 
   // === 2.35.0 新增 Orchestrator 编排器、浏览器 Cookie、快捷键方案、电脑操控与收件箱 ===
   ['Orchestrator Settings', '编排器设置'],
@@ -156,6 +162,38 @@ const samples = [
   ['Connect to WSL', '连接到 WSL'],
   ['Ask a side question without interrupting the main conversation', '在不打断主对话的情况下提出旁路问题'],
   ['Unlock the power of agent swarms.', '释放智能体蜂群 (Agent Swarms) 的强大潜能。'],
+
+  // === v4.1 智能体原生术语精校、去商业错译与图标名词恢复 ===
+  ['Plan', '计划'],
+  ['Current Plan', '当前订阅方案'],
+  ['Implementation Plan', '实施方案'],
+  ['Walkthrough', '执行总结'],
+  ['Proceed', '继续执行'],
+  ['Always Proceed', '始终自动执行'],
+  ['Ask Before Proceeding', '执行前询问'],
+  ['Proceed with Plan', '按计划开始执行'],
+  ['Token Usage', 'Token 用量'],
+  ['Hooks', '钩子'],
+  ['Memory', '记忆 (Memory)'],
+  ['Schedule', '定时计划'],
+  ['Code', '代码'],
+  ['Tree', '目录树'],
+  ['PIN', 'PIN 码'],
+  ['Ignored', '已忽略'],
+
+  // === v4.1 远程插件市场 106 款扩展内部子技能简介覆盖 ===
+  [
+    'Call the Gemini API from the shell with gemini-api. Use for media generation (images, TTS, music, video), file and YouTube analysis, audio/video transcription, Deep Research, and sandboxed agents.',
+    '通过 `gemini-api` 在命令行调用 Gemini API。适用于多媒体生成（图像、TTS 语音合成、音乐、视频）、文件与 YouTube 视频分析、音频/视频转写、深度调研 (Deep Research) 以及沙箱智能体。'.replace('音频/视频转写', '音视频转写'),
+  ],
+  [
+    'Analyze a file for quality and security issues using SonarQube',
+    '使用 SonarQube 分析指定文件的代码质量与安全缺陷',
+  ],
+  [
+    'Auto-approve Railway API calls',
+    '自动放行 Railway API 工具调用',
+  ],
 ];
 
 const nodes = samples.map(([source]) => {
@@ -171,6 +209,17 @@ const xtermProtected = textElement('New Conversation', { class: 'xterm-rows term
 body.append(xtermProtected.element);
 const modelProtected = textElement('Gemini 4 Carbon', { 'data-testid': 'model-selector-trigger' });
 body.append(modelProtected.element);
+
+// v4.1 斜杠命令芯片 (/plan) 与 @提及芯片保护 + 设置页 Plan 上下文区分测试
+const slashMentionChip = new FakeElement('SPAN', { 'data-beautiful-mention': '/plan' });
+slashMentionChip.append(new FakeElement('SPAN')).append(new FakeText('/'));
+slashMentionChip.append(new FakeElement('SPAN')).append(new FakeText('plan'));
+body.append(slashMentionChip);
+
+const settingsModal = new FakeElement('DIV', { role: 'dialog' });
+const settingsPlanLabel = textElement('Plan');
+settingsModal.append(settingsPlanLabel.element);
+body.append(settingsModal);
 
 const inputSample = body.append(
   new FakeElement('INPUT', {
@@ -212,6 +261,8 @@ samples.forEach(([source, expected], idx) => {
 assert.strictEqual(monacoProtected.text.nodeValue, 'Settings');
 assert.strictEqual(xtermProtected.text.nodeValue, 'New Conversation');
 assert.strictEqual(modelProtected.text.nodeValue, 'Gemini 4 Carbon');
+assert.strictEqual(slashMentionChip.textContent, '/plan', `斜杠命令芯片被误翻: ${slashMentionChip.textContent}`);
+assert.strictEqual(settingsPlanLabel.text.nodeValue, '订阅方案', `设置弹窗内 Plan 应译为订阅方案: ${settingsPlanLabel.text.nodeValue}`);
 assert.strictEqual(inputSample.getAttribute('placeholder'), '搜索自定义扩展...');
 
 // 3. 验证 2.35.0 Computer Use 混合内联向导翻译
@@ -226,9 +277,14 @@ assert.ok(
 assert.strictEqual(runtime.translateString('permission PRESET'), '权限预设');
 assert.strictEqual(runtime.translateString('NETWORK access RULES'), '网络访问规则');
 assert.strictEqual(runtime.translateString('enable browser agent'), '启用浏览器智能体');
-// 短全大写缩写不可被误翻
+// 短全大写缩写与单词小写命令/技能标识符不可被误翻
 assert.strictEqual(runtime.translateString('API'), 'API');
 assert.strictEqual(runtime.translateString('MCP'), 'MCP');
+assert.strictEqual(runtime.translateString('plan'), 'plan');
+assert.strictEqual(runtime.translateString('schedule'), 'schedule');
+assert.strictEqual(runtime.translateString('browser'), 'browser');
+assert.strictEqual(runtime.translateString('automation'), 'automation');
+assert.strictEqual(runtime.translateString('research'), 'research');
 
 // 5. 验证长描述省略号截断自适应匹配（如图 2 Gemini API 卡片截断场景）
 const truncatedGeminiDesc = 'Build applications and shell workflows with the ...';
@@ -293,5 +349,5 @@ assertNoPersonalHardcoding(path.join(ROOT_DIR, 'src'));
 assertNoPersonalHardcoding(path.join(ROOT_DIR, 'locales'));
 
 console.log(
-  `✓ v4.0 全部单元测试与 2.35.0 回归校验通过！（签名: ${PATCH_DICT_SIGNATURE}，精确词条: ${Object.keys(runtime.EXACT_TRANSLATIONS).length}，动态正则: ${runtime.REGEX_TRANSLATIONS.length}）`
+  `✓ v4.1 全部单元测试与 2.35.0 架构回归校验通过！（签名: ${PATCH_DICT_SIGNATURE}，精确词条: ${Object.keys(runtime.EXACT_TRANSLATIONS).length}，动态正则: ${runtime.REGEX_TRANSLATIONS.length}）`
 );

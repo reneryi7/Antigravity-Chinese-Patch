@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Antigravity 中文汉化补丁 v4.0 - 统一命令行调度中心 (CLI)
+ * Antigravity 中文汉化补丁 v4.1 - 统一命令行调度中心 (CLI)
  *
  * 用法：
  *   node src/cli.js [install] [--dry-run] [--no-daemon] [--path="D:\..."]
@@ -71,7 +71,7 @@ function parseCliArgs(argv) {
 
 function printHelp() {
   console.log(`
-Antigravity 中文汉化补丁 v4.0 CLI
+Antigravity 中文汉化补丁 v4.1 CLI
 
 常用命令:
   install.bat                        一键自动探测并安装中文汉化补丁（推荐）

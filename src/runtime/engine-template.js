@@ -1,11 +1,11 @@
 /**
- * Antigravity 中文汉化补丁 v4.0 - 前端高性能 DOM 翻译引擎运行时模板
+ * Antigravity 中文汉化补丁 v4.1 - 前端高性能 DOM 翻译引擎运行时模板
  *
  * 核心能力：
- * 1. 多级极速查表：精确匹配 -> 安全大小写不敏感回退 (免疫 Sentence case 改版) ->
+ * 1. 多级极速查表：精确匹配 -> 安全多词大小写不敏感回退 (免疫 Sentence case 改版且不污染单词指令) ->
  *    长文本省略号截断前缀匹配 -> 动态正则 -> 标点/快捷键剥离自适应 -> 多句守恒拆分 -> 局部片段替换
  * 2. 高性能防抖调度：LRU 翻译缓存 + DOM 节点 _agyOriginal O(1) 短路 + rAF 合并批处理 + 多阶段悬浮气泡拦截
- * 3. 零误伤安全边界：严格跳过 Monaco 编辑器、Xterm 终端、代码块与模型名称选择器
+ * 3. 零误伤安全边界：严格跳过 Monaco 编辑器、Xterm 终端、代码块、模型选择器与斜杠命令/@提及芯片
  */
 
 'use strict';
@@ -59,7 +59,7 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
     for (let i = 0; i < keys.length; i++) {
       const k = keys[i];
       const v = EXACT_TRANSLATIONS[k];
-      if (k.length >= 4 && /[a-zA-Z]/.test(k) && !/^[A-Z0-9_.\-/]+$/.test(k)) {
+      if (k.length >= 5 && k.indexOf(' ') !== -1 && /[a-zA-Z]/.test(k) && !/^[A-Z0-9_.\-/]+$/.test(k)) {
         const lk = k.toLowerCase();
         if (!lowercaseFallbackMap.has(lk)) {
           lowercaseFallbackMap.set(lk, v);
@@ -78,8 +78,8 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
   }
 
   function lookupCaseInsensitive(trimmed) {
-    if (!lowercaseFallbackMap || trimmed.length < 4) return null;
-    if (/^[A-Z0-9_.\-/]+$/.test(trimmed)) return null;
+    if (!lowercaseFallbackMap || trimmed.length < 5 || trimmed.indexOf(' ') === -1) return null;
+    if (!/[a-zA-Z]/.test(trimmed) || /^[A-Z0-9_.\-/]+$/.test(trimmed)) return null;
     const hit = lowercaseFallbackMap.get(trimmed.toLowerCase());
     return hit !== undefined ? hit : null;
   }
@@ -140,6 +140,7 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
 
   const patternTables = BUNDLE_DATA.createPatterns({
     translateString: (s) => translateString(s),
+    translateExactOrPattern: (s) => translateExactOrPattern(s),
     translateDuration,
   });
   const REGEX_TRANSLATIONS = patternTables.REGEX_TRANSLATIONS || [];
@@ -166,7 +167,8 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
 
   function isProtectedBoundary(el) {
     if (!el || el.nodeType !== 1) return false;
-    if (IGNORED_TAGS[el.tagName]) return true;
+    const upperTag = el.tagName ? (IGNORED_TAGS[el.tagName] ? el.tagName : el.tagName.toUpperCase()) : '';
+    if (upperTag && IGNORED_TAGS[upperTag]) return true;
     if (el.isContentEditable) return true;
     if (el.getAttribute) {
       const testId = el.getAttribute('data-testid');
@@ -181,7 +183,14 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
         return true;
       }
     }
-    if (el.hasAttribute && el.hasAttribute('data-effort')) return true;
+    if (
+      el.hasAttribute &&
+      (el.hasAttribute('data-effort') ||
+        el.hasAttribute('data-beautiful-mention') ||
+        el.hasAttribute('data-lexical-beautiful-mention'))
+    ) {
+      return true;
+    }
     const cls = typeof el.className === 'string' ? el.className : '';
     if (cls) {
       for (let i = 0; i < IGNORED_CLASSES.length; i++) {
@@ -466,8 +475,10 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
     return false;
   }
 
+  let exactPatternDepth = 0;
+
   function translateExactOrPattern(trimmed) {
-    if (!trimmed) return null;
+    if (!trimmed || exactPatternDepth > 3) return null;
     if (hasOwn.call(EXACT_TRANSLATIONS, trimmed)) {
       return EXACT_TRANSLATIONS[trimmed];
     }
@@ -479,27 +490,32 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
     if (truncHit) {
       return truncHit;
     }
-    for (let i = 0; i < REGEX_TRANSLATIONS.length; i++) {
-      const [pattern, replacement] = REGEX_TRANSLATIONS[i];
-      if (pattern.test(trimmed)) {
-        pattern.lastIndex = 0;
-        return trimmed.replace(pattern, replacement);
-      }
-    }
-    for (let i = 0; i < COMMUNITY_REGEX_PATTERNS.length; i++) {
-      const [pattern, replacement] = COMMUNITY_REGEX_PATTERNS[i];
-      if (pattern.test(trimmed)) {
-        pattern.lastIndex = 0;
-        let res = trimmed.replace(pattern, replacement);
-        for (let j = 0; j < COMMUNITY_REGEX_PATTERNS.length; j++) {
-          const [p2, r2] = COMMUNITY_REGEX_PATTERNS[j];
-          if (p2.test(res)) {
-            p2.lastIndex = 0;
-            res = res.replace(p2, r2);
-          }
+    exactPatternDepth++;
+    try {
+      for (let i = 0; i < REGEX_TRANSLATIONS.length; i++) {
+        const [pattern, replacement] = REGEX_TRANSLATIONS[i];
+        if (pattern.test(trimmed)) {
+          pattern.lastIndex = 0;
+          return trimmed.replace(pattern, replacement);
         }
-        return res;
       }
+      for (let i = 0; i < COMMUNITY_REGEX_PATTERNS.length; i++) {
+        const [pattern, replacement] = COMMUNITY_REGEX_PATTERNS[i];
+        if (pattern.test(trimmed)) {
+          pattern.lastIndex = 0;
+          let res = trimmed.replace(pattern, replacement);
+          for (let j = 0; j < COMMUNITY_REGEX_PATTERNS.length; j++) {
+            const [p2, r2] = COMMUNITY_REGEX_PATTERNS[j];
+            if (p2.test(res)) {
+              p2.lastIndex = 0;
+              res = res.replace(p2, r2);
+            }
+          }
+          return res;
+        }
+      }
+    } catch {} finally {
+      exactPatternDepth--;
     }
     return null;
   }
@@ -779,7 +795,10 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
     const text = element.textContent.trim();
     if (!text || text.length > 2000) return;
 
-    const translated = translateString(text);
+    const translated =
+      hasOwn.call(SETTINGS_CONTEXT_TRANSLATIONS, text) && isSettingsContext(element)
+        ? SETTINGS_CONTEXT_TRANSLATIONS[text]
+        : translateString(text);
     if (translated && translated !== text) {
       textNodes[0].nodeValue = textNodes[0].nodeValue.replace(textNodes[0].nodeValue.trim(), translated);
       textNodes[0]._agyOriginal = textNodes[0].nodeValue;
@@ -793,24 +812,26 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
   function translateNode(node) {
     if (!node) return;
 
-    if (node.nodeType === 1) {
-      if (shouldSkipElement(node)) return;
-      if (node.dataset && node.dataset.i18nTranslated === 'skip') return;
+    try {
+      if (node.nodeType === 1) {
+        if (shouldSkipElement(node)) return;
+        if (node.dataset && node.dataset.i18nTranslated === 'skip') return;
 
-      translateAttributes(node);
-      if (node.tagName === 'TEXTAREA' || node.tagName === 'INPUT') return;
+        translateAttributes(node);
+        if (node.tagName === 'TEXTAREA' || node.tagName === 'INPUT') return;
 
-      translateElementOwnText(node);
+        translateElementOwnText(node);
 
-      const children = node.childNodes;
-      if (children) {
-        for (let i = 0; i < children.length; i++) {
-          translateNode(children[i]);
+        const children = node.childNodes;
+        if (children) {
+          for (let i = 0; i < children.length; i++) {
+            translateNode(children[i]);
+          }
         }
+      } else if (node.nodeType === 3) {
+        translateTextNode(node);
       }
-    } else if (node.nodeType === 3) {
-      translateTextNode(node);
-    }
+    } catch {}
   }
 
   let activeObserver = null;
@@ -819,8 +840,41 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
   let translateTimer = null;
   const pendingNodes = new Set();
 
+  function enqueueMutationRecords(mutations) {
+    if (!mutations || mutations.length === 0) return;
+    for (let i = 0; i < mutations.length; i++) {
+      const mutation = mutations[i];
+      if (mutation.type === 'childList') {
+        const added = mutation.addedNodes;
+        for (let j = 0; j < added.length; j++) {
+          const node = added[j];
+          if (node.nodeType === 1 || node.nodeType === 3) {
+            pendingNodes.add(node);
+          }
+        }
+      } else if (mutation.type === 'characterData') {
+        if (mutation.target) {
+          mutation.target._agyOriginal = undefined;
+          pendingNodes.add(mutation.target);
+        }
+      } else if (mutation.type === 'attributes') {
+        if (mutation.target && TRANSLATABLE_ATTRS.includes(mutation.attributeName)) {
+          pendingNodes.add(mutation.target);
+        }
+      }
+    }
+  }
+
   function disconnectObserver() {
     if (activeObserver && isObserving) {
+      try {
+        if (typeof activeObserver.takeRecords === 'function') {
+          const leftover = activeObserver.takeRecords();
+          if (leftover && leftover.length > 0) {
+            enqueueMutationRecords(leftover);
+          }
+        }
+      } catch {}
       try { activeObserver.disconnect(); } catch {}
       isObserving = false;
     }
@@ -828,19 +882,23 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
 
   function reconnectObserver() {
     if (activeObserver && typeof document !== 'undefined' && document.documentElement) {
-      if (isObserving && observedRootEl === document.documentElement) return;
-      try { activeObserver.disconnect(); } catch {}
-      try {
-        activeObserver.observe(document.documentElement, {
-          childList: true,
-          subtree: true,
-          characterData: true,
-          attributes: true,
-          attributeFilter: TRANSLATABLE_ATTRS,
-        });
-        observedRootEl = document.documentElement;
-        isObserving = true;
-      } catch {}
+      if (!isObserving || observedRootEl !== document.documentElement) {
+        try { activeObserver.disconnect(); } catch {}
+        try {
+          activeObserver.observe(document.documentElement, {
+            childList: true,
+            subtree: true,
+            characterData: true,
+            attributes: true,
+            attributeFilter: TRANSLATABLE_ATTRS,
+          });
+          observedRootEl = document.documentElement;
+          isObserving = true;
+        } catch {}
+      }
+      if (pendingNodes.size > 0) {
+        processPendingTranslations();
+      }
     }
   }
 
@@ -889,28 +947,7 @@ function initAntigravityZhRuntime(BUNDLE_DATA) {
     if (typeof MutationObserver === 'undefined') return null;
 
     activeObserver = new MutationObserver((mutations) => {
-      for (let i = 0; i < mutations.length; i++) {
-        const mutation = mutations[i];
-        if (mutation.type === 'childList') {
-          const added = mutation.addedNodes;
-          for (let j = 0; j < added.length; j++) {
-            const node = added[j];
-            if (node.nodeType === 1 || node.nodeType === 3) {
-              pendingNodes.add(node);
-            }
-          }
-        } else if (mutation.type === 'characterData') {
-          if (mutation.target) {
-            mutation.target._agyOriginal = undefined;
-            pendingNodes.add(mutation.target);
-          }
-        } else if (mutation.type === 'attributes') {
-          if (mutation.target && TRANSLATABLE_ATTRS.includes(mutation.attributeName)) {
-            pendingNodes.add(mutation.target);
-          }
-        }
-      }
-
+      enqueueMutationRecords(mutations);
       if (pendingNodes.size > 0) {
         processPendingTranslations();
       }
